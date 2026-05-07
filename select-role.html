@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Select Role</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Select Your Role</h1>
+    <select id="roleSelect">
+      <option value="">-- Choose Role --</option>
+      <option value="student">Student</option>
+      <option value="teacher">Teacher</option>
+      <option value="admin">Admin</option>
+    </select>
+    <button onclick="goToLogin()">Continue</button>
+  </div>
+
+  <script>
+    function goToLogin() {
+      const role = document.getElementById("roleSelect").value;
+      if (!role) {
+        alert("Please select a role.");
+        return;
+      }
+      window.location.href = `login.html?role=${role}`;
+    }
+  </script>
+</body>
+</html>

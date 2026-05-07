@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="overlay">
+    <div class="container">
+      <h1 id="dashboardTitle">Dashboard</h1>
+      <div id="buttonsContainer" class="buttons-container"></div>
+
+      <!-- Teacher: Submit Marks -->
+      <div id="submitMarksView" class="view hidden">
+        <h2>Submit Marks</h2>
+        <input type="text" id="studentName" placeholder="Student Name" required />
+        <input type="text" id="subject" placeholder="Subject" required />
+        <input type="number" id="marks" placeholder="Marks (0-100)" min="0" max="100" required />
+        <button onclick="Dashboard.submitMarks()">Submit</button>
+        <div id="submitMarksFeedback"></div>
+      </div>
+
+      <!-- Teacher: Delete Marks -->
+      <div id="deleteMarksView" class="view hidden">
+        <h2>Delete Marks</h2>
+        <input type="text" id="delStudentName" placeholder="Student Name" required />
+        <input type="text" id="delSubject" placeholder="Subject" required />
+        <button onclick="Dashboard.deleteMarks()">Delete</button>
+        <div id="deleteMarksFeedback"></div>
+      </div>
+
+      <!-- Student: View Marks -->
+      <div id="viewMarksView" class="view hidden">
+        <h2>Sessional Marks</h2>
+        <input type="text" id="studentNameInput" placeholder="Enter Your Name" required />
+        <button onclick="Dashboard.loadStudentMarks()">View Marks</button>
+        <ul id="marksList"></ul>
+      </div>
+
+      <!-- Teacher: Sessional Marks Calculator -->
+      <div id="marksCalculatorView" class="view hidden">
+        <h2>Sessional Marks Calculator</h2>
+        <input id="studentId" placeholder="Student ID" required />
+        <input id="attendance" type="number" placeholder="Attendance (%)" min="0" max="100" required />
+        <input id="assignments" type="number" placeholder="Assignments Submitted (out of 5)" min="0" max="5" required />
+        <input id="currentMarks" type="number" placeholder="Current Marks (out of 75)" min="0" max="75" required />
+        <button onclick="Dashboard.calculate()">Calculate</button>
+        <div id="result" style="margin-top: 20px; text-align: left;"></div>
+      </div>
+
+      <!-- Admin: Manage Students Data -->
+      <div id="manageStudentsView" class="view hidden">
+        <h2>Manage Students Data</h2>
+        <div>
+          <h3>Upload Student Data (CSV)</h3>
+          <input type="file" id="csvFileInput" accept=".csv" />
+          <button onclick="Dashboard.processStudentData()">Process Data</button>
+          <div id="processingResults" style="margin-top: 20px;"></div>
+        </div>
+        <div style="margin-top: 30px;">
+          <h3>Update Student Marks</h3>
+          <input type="text" id="updateStudentId" placeholder="Student ID" required />
+          <input type="text" id="updateSubject" placeholder="Subject" required />
+          <input type="number" id="updateMarks" placeholder="New Marks (0-100)" min="0" max="100" required />
+          <button onclick="Dashboard.updateMarks()">Update Marks</button>
+          <div id="updateMarksFeedback" style="margin-top: 20px;"></div>
+        </div>
+        <div style="margin-top: 30px;">
+          <h3>Generate Performance Report</h3>
+          <button onclick="Dashboard.generateReport()">Generate Report</button>
+          <div id="reportResults" style="margin-top: 20px;"></div>
+        </div>
+        <div style="margin-top: 30px;">
+          <h3>Top Performing Students</h3>
+          <div id="topStudentsList"></div>
+        </div>
+      </div>
+
+      <!-- Teacher: Process Student Grades -->
+      <div id="processGradesView" class="view hidden">
+        <h2>Process Student Grades</h2>
+        <div>
+          <h3>Search Students</h3>
+          <input type="text" id="searchStudentId" placeholder="Enter Student ID" />
+          <div id="searchResults" style="margin-top: 20px;"></div>
+        </div>
+        <div style="margin-top: 30px;">
+          <button onclick="Dashboard.exportProcessedGrades()">Export Processed Grades</button>
+          <div id="exportResults" style="margin-top: 20px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Defining the Dashboard object to encapsulate all functionality
+    const Dashboard = {
+      marksData: JSON.parse(localStorage.getItem('marksData')) || {},
+
+      // Saving data to localStorage (temporary, replace with server-side storage in production)
+      saveMarksToStorage() {
+        localStorage.setItem('marksData', JSON.stringify(this.marksData));
+      },
+
+      // Showing a specific view and hiding others
+      showView(viewId) {
+        document.querySelectorAll('.view').forEach(view => view.classList.add('hidden'));
+        document.getElementById(viewId).classList.remove('hidden');
+      },
+
+      // Displaying feedback messages
+      showFeedback(elementId, message, type = 'success') {
+        const element = document.getElementById(elementId);
+        element.innerHTML = `<p class="${type}">${message}</p>`;
+        element.classList.add(type);
+        setTimeout(() => {
+          element.innerHTML = '';
+          element.classList.remove(type);
+        }, 3000);
+      },
+
+      // Initializing the dashboard based on role
+      init() {
+        const params = new URLSearchParams(window.location.search);
+        const role = params.get('role')?.toLowerCase();
+        if (!['student', 'teacher', 'admin'].includes(role)) {
+          this.showFeedback('buttonsContainer', 'Invalid role specified.', 'error');
+          return;
+        }
+
+        document.getElementById('dashboardTitle').textContent = `${role.charAt(0).toUpperCase() + role.slice(1)} Dashboard`;
+
+        const buttons = {
+          student: [
+            { text: 'View Sessional Marks', action: () => this.showView('viewMarksView') }
+          ],
+          teacher: [
+            { text: 'Submit Marks', action: () => this.showView('submitMarksView') },
+            { text: 'Delete Marks', action: () => this.showView('deleteMarksView') },
+            { text: 'Sessional Marks Calculator', action: () => this.showView('marksCalculatorView') },
+            { text: 'Process Student Grades', action: () => this.showView('processGradesView') }
+          ],
+          admin: [
+            { text: 'Manage Students Data', action: () => this.showView('manageStudentsView') }
+          ]
+        };
+
+        const container = document.getElementById('buttonsContainer');
+        buttons[role].forEach(({ text, action }) => {
+          const btn = document.createElement('button');
+          btn.textContent = text;
+          btn.onclick = action;
+          container.appendChild(btn);
+        });
+
+        // Attach search event listener
+        const searchInput = document.getElementById('searchStudentId');
+        if (searchInput) {
+          searchInput.addEventListener('input', () => this.searchStudents());
+        }
+      },
+
+      // Submitting marks for a student
+      submitMarks() {
+        const name = document.getElementById('studentName').value.trim();
+        const subject = document.getElementById('subject').value.trim();
+        const marks = parseInt(document.getElementById('marks').value);
+
+        if (!name || !subject || isNaN(marks) || marks < 0 || marks > 100) {
+          this.showFeedback('submitMarksFeedback', 'Please fill in all fields correctly.', 'error');
+          return;
+        }
+
+        if (!this.marksData[name]) this.marksData[name] = {};
+        this.marksData[name][subject] = marks;
+        this.saveMarksToStorage();
+        this.showFeedback('submitMarksFeedback', `Marks submitted for ${name} in ${subject}.`);
+        document.getElementById('submitMarksView').querySelectorAll('input').forEach(input => (input.value = ''));
+      },
+
+      // Deleting marks for a student
+      deleteMarks() {
+        const name = document.getElementById('delStudentName').value.trim();
+        const subject = document.getElementById('delSubject').value.trim();
+
+        if (!name || !subject) {
+          this.showFeedback('deleteMarksFeedback', 'Please fill in both student name and subject.', 'error');
+          return;
+        }
+
+        if (this.marksData[name]?.[subject] !== undefined) {
+          delete this.marksData[name][subject];
+          if (Object.keys(this.marksData[name]).length === 0) delete this.marksData[name];
+          this.saveMarksToStorage();
+          this.showFeedback('deleteMarksFeedback', `Marks deleted for ${name} in ${subject}.`);
+        } else {
+          this.showFeedback('deleteMarksFeedback', `No marks found for ${name} in ${subject}.`, 'error');
+        }
+        document.getElementById('deleteMarksView').querySelectorAll('input').forEach(input => (input.value = ''));
+      },
+
+      // Loading and displaying student marks
+      loadStudentMarks() {
+        const name = document.getElementById('studentNameInput').value.trim();
+        const list = document.getElementById('marksList');
+        list.innerHTML = '';
+
+        if (!name) {
+          list.innerHTML = '<li class="error">Please enter a student name.</li>';
+          return;
+        }
+
+        const studentData = this.marksData[name];
+        if (studentData) {
+          for (const [subject, data] of Object.entries(studentData)) {
+            const li = document.createElement('li');
+            if (typeof data === 'object') {
+              li.innerHTML = `
+                <strong>${subject}:</strong><br>
+                Attendance: ${data.attendance} / 10<br>
+                Assignments: ${data.assignments} / 10<br>
+                Bonus: ${data.bonus} / 5<br>
+                Sessional: ${data.sessional} / 25<br>
+                Total: ${data.total}<br>
+                Grade: ${data.grade}
+              `;
+            } else {
+              li.textContent = `${subject}: ${data} marks`;
+            }
+            list.appendChild(li);
+          }
+        } else {
+          list.innerHTML = '<li class="error">No marks found for this student.</li>';
+        }
+      },
+
+      // Calculating sessional marks and grades
+      calculate() {
+        const studentId = document.getElementById('studentId').value.trim();
+        const attendance = parseFloat(document.getElementById('attendance').value);
+        const assignments = parseFloat(document.getElementById('assignments').value);
+        const currentMarks = parseFloat(document.getElementById('currentMarks').value);
+
+        if (!studentId || isNaN(attendance) || attendance < 0 || attendance > 100) {
+          this.showFeedback('result', 'Please enter valid attendance percentage (0-100).', 'error');
+          return;
+        }
+        if (isNaN(assignments) || assignments < 0 || assignments > 5) {
+          this.showFeedback('result', 'Please enter valid assignments submitted (0-5).', 'error');
+          return;
+        }
+        if (isNaN(currentMarks) || currentMarks < 0 || currentMarks > 75) {
+          this.showFeedback('result', 'Please enter valid current marks (0-75).', 'error');
+          return;
+        }
+
+        const attendanceMarks = (attendance / 100) * 10;
+        const assignmentMarks = (assignments / 5) * 10;
+        const initialSessional = attendanceMarks + assignmentMarks;
+        const subjectAndSessional = currentMarks + initialSessional;
+
+        const getGrade = marks => {
+          if (marks >= 87) return 10;
+          if (marks >= 75) return 9;
+          if (marks >= 65) return 8;
+          if (marks >= 55) return 7;
+          if (marks >= 45) return 6;
+          if (marks >= 35) return 5;
+          return 'F';
+        };
+
+        const currentGrade = getGrade(subjectAndSessional);
+        let upgradeBonus = 0;
+        let newGrade = currentGrade;
+
+        if (currentGrade !== 'F') {
+          const thresholds = [87, 75, 65, 55, 45, 35];
+          const grades = [10, 9, 8, 7, 6, 5];
+          const currentGradeIndex = grades.indexOf(currentGrade);
+          for (let i = currentGradeIndex - 1; i >= 0; i--) {
+            const requiredMarks = thresholds[i];
+            const diff = requiredMarks - subjectAndSessional;
+            if (diff > 0 && diff <= 5) {
+              upgradeBonus = diff;
+              newGrade = grades[i];
+              break;
+            }
+          }
+        }
+
+        const totalSessional = initialSessional + upgradeBonus;
+        const totalWithSessional = currentMarks + totalSessional;
+
+        if (!this.marksData[studentId]) this.marksData[studentId] = {};
+        this.marksData[studentId]['Sessional Breakdown'] = {
+          attendance: attendanceMarks.toFixed(2),
+          assignments: assignmentMarks.toFixed(2),
+          bonus: upgradeBonus.toFixed(2),
+          sessional: totalSessional.toFixed(2),
+          total: totalWithSessional.toFixed(2),
+          grade: newGrade
+        };
+        this.saveMarksToStorage();
+
+        document.getElementById('result').innerHTML = `
+          <p><strong>Attendance Marks:</strong> ${attendanceMarks.toFixed(2)} / 10</p>
+          <p><strong>Assignment Marks:</strong> ${assignmentMarks.toFixed(2)} / 10</p>
+          <p><strong>Grade Upgrade Bonus:</strong> ${upgradeBonus.toFixed(2)} / 5</p>
+          <p><strong>Total Sessional Marks:</strong> ${totalSessional.toFixed(2)} / 25</p>
+          <p><strong>Total (Subject + Sessional):</strong> ${totalWithSessional.toFixed(2)}</p>
+          <p><strong>Previous Grade:</strong> ${currentGrade}</p>
+          <p><strong>Upgraded Grade:</strong> ${newGrade}</p>
+        `;
+      },
+
+      // Processing student data from CSV
+      processStudentData() {
+        const fileInput = document.getElementById('csvFileInput');
+        const file = fileInput.files[0];
+
+        if (!file) {
+          this.showFeedback('processingResults', 'Please select a CSV file.', 'error');
+          return;
+        }
+
+        if (!file.name.endsWith('.csv')) {
+          this.showFeedback('processingResults', 'Please upload a valid CSV file.', 'error');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const contents = e.target.result;
+            const lines = contents.split('\n').filter(line => line.trim());
+            if (lines.length < 2) throw new Error('CSV file is empty or has no data rows');
+
+            // Parsing CSV with support for quoted fields
+            const parseCSVLine = line => {
+              const result = [];
+              let current = '';
+              let inQuotes = false;
+              for (let char of line) {
+                if (char === '"') {
+                  inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                  result.push(current.trim());
+                  current = '';
+                } else {
+                  current += char;
+                }
+              }
+              result.push(current.trim());
+              return result;
+            };
+
+            const headers = parseCSVLine(lines[0]);
+            const requiredFields = ['StudentID', 'Attendance', 'AssignmentsSubmitted', 'CurrentMarksOutOf75'];
+            const missingFields = requiredFields.filter(field => !headers.includes(field));
+
+            if (missingFields.length > 0) {
+              this.showFeedback('processingResults', `Missing required fields: ${missingFields.join(', ')}`, 'error');
+              return;
+            }
+
+            const students = [];
+            let errorCount = 0;
+
+            for (let i = 1; i < lines.length; i++) {
+              try {
+                if (!lines[i].trim()) continue;
+                const values = parseCSVLine(lines[i]);
+                const student = {};
+                headers.forEach((header, j) => {
+                  student[header] = values[j] || '';
+                });
+
+                let attendance = parseFloat(student['Attendance'] || 0);
+                let assignments = parseFloat(student['AssignmentsSubmitted'] || 0);
+                let currentMarks = parseFloat(student['CurrentMarksOutOf75'] || 0);
+
+                if (isNaN(attendance) || attendance < 0 || attendance > 100) {
+                  console.warn(`Invalid attendance for ${student.StudentID}: ${student.Attendance}`);
+                  attendance = 0;
+                }
+                if (isNaN(assignments) || assignments < 0 || assignments > 5) {
+                  console.warn(`Invalid assignments for ${student.StudentID}: ${student.AssignmentsSubmitted}`);
+                  assignments = 0;
+                }
+                if (isNaN(currentMarks) || currentMarks < 0 || currentMarks > 75) {
+                  console.warn(`Invalid current marks for ${student.StudentID}: ${student.CurrentMarksOutOf75}`);
+                  currentMarks = 0;
+                }
+
+                students.push({ ...student, Attendance: attendance, AssignmentsSubmitted: assignments, CurrentMarksOutOf75: currentMarks });
+              } catch (error) {
+                errorCount++;
+                console.error(`Error processing line ${i + 1}: ${error}`);
+              }
+            }
+
+            const processedStudents = students.map(student => {
+              const attendance = parseFloat(student['Attendance']);
+              const assignments = parseFloat(student['AssignmentsSubmitted']);
+              const currentMarks = parseFloat(student['CurrentMarksOutOf75']);
+
+              const attendanceMarks = (attendance / 100) * 10;
+              const assignmentMarks = (assignments / 5) * 10;
+              const initialSessional = attendanceMarks + assignmentMarks;
+              const subjectAndSessional = currentMarks + initialSessional;
+
+              const getGrade = marks => {
+                if (marks >= 87) return 10;
+                if (marks >= 75) return 9;
+                if (marks >= 65) return 8;
+                if (marks >= 55) return 7;
+                if (marks >= 45) return 6;
+                if (marks >= 35) return 5;
+                return 'F';
+              };
+
+              const currentGrade = getGrade(subjectAndSessional);
+              let upgradeBonus = 0;
+              let newGrade = currentGrade;
+
+              if (currentGrade !== 'F') {
+                const thresholds = [87, 75, 65, 55, 45, 35];
+                const grades = [10, 9, 8, 7, 6, 5];
+                const currentGradeIndex = grades.indexOf(currentGrade);
+                for (let i = currentGradeIndex - 1; i >= 0; i--) {
+                  const requiredMarks = thresholds[i];
+                  const diff = requiredMarks - subjectAndSessional;
+                  if (diff > 0 && diff <= 5) {
+                    upgradeBonus = diff;
+                    newGrade = grades[i];
+                    break;
+                  }
+                }
+              }
+
+              const totalSessional = initialSessional + upgradeBonus;
+              const totalWithSessional = currentMarks + totalSessional;
+
+              return {
+                ...student,
+                AttendanceMarks: attendanceMarks.toFixed(2),
+                AssignmentMarks: assignmentMarks.toFixed(2),
+                UpgradeBonus: upgradeBonus.toFixed(2),
+                TotalSessional: totalSessional.toFixed(2),
+                FinalTotal: totalWithSessional.toFixed(2),
+                PreviousGrade: currentGrade,
+                UpgradedGrade: newGrade
+              };
+            });
+
+            processedStudents.sort((a, b) => b.FinalTotal - a.FinalTotal);
+
+            const topStudentsList = document.getElementById('topStudentsList');
+            topStudentsList.innerHTML = '<h4>Top 5 Students:</h4>';
+            processedStudents.slice(0, 5).forEach((student, index) => {
+              const div = document.createElement('div');
+              div.innerHTML = `
+                <p><strong>${index + 1}. ${student.StudentID}</strong></p>
+                <p>Final Marks: ${student.FinalTotal}, Grade: ${student.UpgradedGrade}</p>
+                <hr>
+              `;
+              topStudentsList.appendChild(div);
+            });
+
+            this.marksData.processedStudents = processedStudents;
+            this.saveMarksToStorage();
+            this.showFeedback('processingResults', `Processed ${students.length} student records (${errorCount} errors).`);
+          } catch (error) {
+            this.showFeedback('processingResults', `Error processing CSV file: ${error.message}`, 'error');
+          }
+        };
+
+        reader.onerror = () => this.showFeedback('processingResults', 'Error reading file.', 'error');
+        reader.readAsText(file);
+      },
+
+      // Updating marks for a student
+      updateMarks() {
+        const studentId = document.getElementById('updateStudentId').value.trim();
+        const subject = document.getElementById('updateSubject').value.trim();
+        const marks = parseInt(document.getElementById('updateMarks').value);
+
+        if (!studentId || !subject || isNaN(marks) || marks < 0 || marks > 100) {
+          this.showFeedback('updateMarksFeedback', 'Please fill in all fields correctly.', 'error');
+          return;
+        }
+
+        // Check if student exists in processedStudents
+        const studentExists = this.marksData.processedStudents?.some(student => student.StudentID === studentId);
+        if (!studentExists) {
+          this.showFeedback('updateMarksFeedback', `Student ID ${studentId} not found. Please process a CSV file first.`, 'error');
+          return;
+        }
+
+        if (!this.marksData[studentId]) this.marksData[studentId] = {};
+        this.marksData[studentId][subject] = marks;
+        this.saveMarksToStorage();
+        this.showFeedback('updateMarksFeedback', `Marks updated for ${studentId} in ${subject}.`);
+        document.getElementById('manageStudentsView').querySelectorAll('input').forEach(input => (input.value = ''));
+      },
+
+      // Generating performance report
+      generateReport() {
+        if (!this.marksData.processedStudents || this.marksData.processedStudents.length === 0) {
+          this.showFeedback('reportResults', 'No student data available. Please process a CSV file first.', 'error');
+          return;
+        }
+
+        const students = this.marksData.processedStudents;
+        const totalStudents = students.length;
+        const averageMarks = (students.reduce((sum, student) => sum + parseFloat(student.FinalTotal), 0) / totalStudents).toFixed(2);
+        const gradeDistribution = { 10: 0, 9: 0, 8: 0, 7: 0, 6: 0, 5: 0, F: 0 };
+        students.forEach(student => {
+          gradeDistribution[student.UpgradedGrade]++;
+        });
+
+        const reportDiv = document.getElementById('reportResults');
+        reportDiv.innerHTML = `
+          <h4>Performance Report</h4>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; background: #f8f9fa; padding: 1rem; border-radius: 5px;">
+            <tr style="border-bottom: 1px solid #ccc;">
+              <th style="padding: 8px; text-align: left;">Metric</th>
+              <th style="padding: 8px; text-align: left;">Value</th>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Total Students</td>
+              <td style="padding: 8px;">${totalStudents}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Average Final Marks</td>
+              <td style="padding: 8px;">${averageMarks}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Grade 10</td>
+              <td style="padding: 8px;">${gradeDistribution[10]} students</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Grade 9</td>
+              <td style="padding: 8px;">${gradeDistribution[9]} students</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Grade 8</td>
+              <td style="padding: 8px;">${gradeDistribution[8]} students</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Grade 7</td>
+              <td style="padding: 8px;">${gradeDistribution[7]} students</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Grade 6</td>
+              <td style="padding: 8px;">${gradeDistribution[6]} students</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Grade 5</td>
+              <td style="padding: 8px;">${gradeDistribution[5]} students</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px;">Grade F</td>
+              <td style="padding: 8px;">${gradeDistribution['F']} students</td>
+            </tr>
+          </table>
+        `;
+      },
+
+      // Searching students by StudentID
+      searchStudents() {
+        const searchInput = document.getElementById('searchStudentId').value.trim().toLowerCase();
+        const resultsDiv = document.getElementById('searchResults');
+
+        if (!this.marksData.processedStudents || this.marksData.processedStudents.length === 0) {
+          resultsDiv.innerHTML = '<p class="error">No student data available. Please process a CSV file first.</p>';
+          return;
+        }
+
+        const filteredStudents = this.marksData.processedStudents.filter(student =>
+          student.StudentID.toLowerCase().includes(searchInput)
+        );
+
+        if (filteredStudents.length === 0) {
+          resultsDiv.innerHTML = '<p class="error">No students found matching the search criteria.</p>';
+          return;
+        }
+
+        resultsDiv.innerHTML = `
+          <h4>Search Results</h4>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px; background: #f8f9fa; padding: 1rem; border-radius: 5px;">
+            <tr style="border-bottom: 1px solid #ccc;">
+              <th style="padding: 8px; text-align: left;">Student ID</th>
+              <th style="padding: 8px; text-align: left;">Attendance (%)</th>
+              <th style="padding: 8px; text-align: left;">Assignments (out of 5)</th>
+              <th style="padding: 8px; text-align: left;">Current Marks (out of 75)</th>
+              <th style="padding: 8px; text-align: left;">Final Total</th>
+              <th style="padding: 8px; text-align: left;">Grade</th>
+            </tr>
+            ${filteredStudents.map(student => `
+              <tr>
+                <td style="padding: 8px;">${student.StudentID}</td>
+                <td style="padding: 8px;">${student.Attendance}</td>
+                <td style="padding: 8px;">${student.AssignmentsSubmitted}</td>
+                <td style="padding: 8px;">${student.CurrentMarksOutOf75}</td>
+                <td style="padding: 8px;">${student.FinalTotal}</td>
+                <td style="padding: 8px;">${student.UpgradedGrade}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+      },
+
+      // Exporting processed grades as CSV
+      exportProcessedGrades() {
+        if (!this.marksData.processedStudents || this.marksData.processedStudents.length === 0) {
+          this.showFeedback('exportResults', 'No student data available to export. Please process a CSV file first.', 'error');
+          return;
+        }
+
+        let csvContent = 'data:text/csv;charset=utf-8,';
+        const headers = Object.keys(this.marksData.processedStudents[0]);
+        csvContent += headers.join(',') + '\r\n';
+
+        this.marksData.processedStudents.forEach(student => {
+          csvContent += headers.map(header => `"${student[header]}"`).join(',') + '\r\n';
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', 'student_grades_processed.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        this.showFeedback('exportResults', `Exported ${this.marksData.processedStudents.length} student records.`);
+      }
+    };
+
+    // Initializing the dashboard on page load
+    document.addEventListener('DOMContentLoaded', () => Dashboard.init());
+  </script>
+</body>
+</html>
