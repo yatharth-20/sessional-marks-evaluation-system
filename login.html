@@ -7,20 +7,28 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="container">
-    <h1 id="roleTitle">Login</h1>
-    <input type="text" placeholder="Username" />
-    <input type="password" placeholder="Password" />
-    <button onclick="goToDashboard()">Login</button>
+  <div class="overlay">
+    <div class="container">
+      <div class="view narrow">
+        <h1 id="roleTitle">Login</h1>
+        <input type="text" id="username" placeholder="Username" />
+        <input type="password" id="password" placeholder="Password" />
+        <button onclick="goToDashboard()">Login</button>
+      </div>
+    </div>
   </div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
-    const role = params.get("role");
-    document.getElementById("roleTitle").innerText = `Login as ${role.charAt(0).toUpperCase() + role.slice(1)}`;
+    const role = params.get("role")?.toLowerCase();
+    if (!role || !["student", "teacher", "admin"].includes(role)) {
+      window.location.href = "select-role.html";
+    } else {
+      document.getElementById("roleTitle").innerText = `Login as ${role.charAt(0).toUpperCase() + role.slice(1)}`;
+    }
 
     function goToDashboard() {
-      window.location.href = `dashboard.html?role=${role}`;
+      window.location.href = `dashboard.html?role=${encodeURIComponent(role)}`;
     }
   </script>
 </body>

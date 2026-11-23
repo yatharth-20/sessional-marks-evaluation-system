@@ -34,7 +34,7 @@
       <!-- Student: View Marks -->
       <div id="viewMarksView" class="view hidden">
         <h2>Sessional Marks</h2>
-        <input type="text" id="studentNameInput" placeholder="Enter Your Name" required />
+        <input type="text" id="studentNameInput" placeholder="Enter Student ID or Name" required />
         <button onclick="Dashboard.loadStudentMarks()">View Marks</button>
         <ul id="marksList"></ul>
       </div>
@@ -201,22 +201,103 @@
         document.getElementById('deleteMarksView').querySelectorAll('input').forEach(input => (input.value = ''));
       },
 
+      // Shared helper to map total marks to a grade
+      getGrade(marks) {
+        if (marks >= 87) return 10;
+        if (marks >= 75) return 9;
+        if (marks >= 65) return 8;
+        if (marks >= 55) return 7;
+        if (marks >= 45) return 6;
+        if (marks >= 35) return 5;
+        return 'F';
+      },
+
+      // Shared helper to evaluate sessional marks, bonus, and upgraded grade
+      evaluateSessional(attendance, assignments, currentMarks) {
+        const attendanceMarks = (attendance / 100) * 10;
+        const assignmentMarks = (assignments / 5) * 10;
+        const initialSessional = attendanceMarks + assignmentMarks;
+        const subjectAndSessional = currentMarks + initialSessional;
+
+        const currentGrade = this.getGrade(subjectAndSessional);
+        let upgradeBonus = 0;
+        let newGrade = currentGrade;
+
+        if (currentGrade !== 'F') {
+          const thresholds = [87, 75, 65, 55, 45, 35];
+          const grades = [10, 9, 8, 7, 6, 5];
+          const currentGradeIndex = grades.indexOf(currentGrade);
+          for (let i = currentGradeIndex - 1; i >= 0; i--) {
+            const requiredMarks = thresholds[i];
+            const diff = requiredMarks - subjectAndSessional;
+            if (diff > 0 && diff <= 5) {
+              upgradeBonus = diff;
+              newGrade = grades[i];
+              break;
+            }
+          }
+        }
+
+        const totalSessional = initialSessional + upgradeBonus;
+        const totalWithSessional = currentMarks + totalSessional;
+
+        return {
+          attendanceMarks: attendanceMarks.toFixed(2),
+          assignmentMarks: assignmentMarks.toFixed(2),
+          upgradeBonus: upgradeBonus.toFixed(2),
+          totalSessional: totalSessional.toFixed(2),
+          totalWithSessional: totalWithSessional.toFixed(2),
+          currentGrade,
+          newGrade
+        };
+      },
+
+      // Finding a student record key case-insensitively
+      findStudentKey(query) {
+        const normalized = query.trim().toLowerCase();
+        if (!normalized || normalized === 'processedstudents') return null;
+        if (this.marksData[query] && query !== 'processedStudents') return query;
+        return Object.keys(this.marksData).find(
+          key => key !== 'processedStudents' && key.toLowerCase() === normalized
+        ) || null;
+      },
+
       // Loading and displaying student marks
       loadStudentMarks() {
-        const name = document.getElementById('studentNameInput').value.trim();
+        const query = document.getElementById('studentNameInput').value.trim();
         const list = document.getElementById('marksList');
         list.innerHTML = '';
 
-        if (!name) {
-          list.innerHTML = '<li class="error">Please enter a student name.</li>';
+        if (!query) {
+          list.innerHTML = '<li class="error">Please enter a Student ID or name.</li>';
           return;
         }
 
-        const studentData = this.marksData[name];
-        if (studentData) {
+        const matchedKey = this.findStudentKey(query);
+        let studentData = matchedKey ? { ...this.marksData[matchedKey] } : null;
+
+        // Also check processedStudents array in case CSV data was uploaded earlier without per-student sync
+        const csvRecord = this.marksData.processedStudents?.find(
+          s => s.StudentID && s.StudentID.toLowerCase() === query.toLowerCase()
+        );
+        if (csvRecord) {
+          if (!studentData) studentData = {};
+          if (!studentData['Sessional Breakdown']) {
+            studentData['Sessional Breakdown'] = {
+              attendance: csvRecord.AttendanceMarks,
+              assignments: csvRecord.AssignmentMarks,
+              bonus: csvRecord.UpgradeBonus,
+              sessional: csvRecord.TotalSessional,
+              total: csvRecord.FinalTotal,
+              grade: csvRecord.UpgradedGrade
+            };
+          }
+        }
+
+        if (studentData && Object.keys(studentData).length > 0) {
           for (const [subject, data] of Object.entries(studentData)) {
             const li = document.createElement('li');
-            if (typeof data === 'object') {
+            if (typeof data === 'object' && data !== null) {
               li.innerHTML = `
                 <strong>${subject}:</strong><br>
                 Attendance: ${data.attendance} / 10<br>
@@ -256,62 +337,27 @@
           return;
         }
 
-        const attendanceMarks = (attendance / 100) * 10;
-        const assignmentMarks = (assignments / 5) * 10;
-        const initialSessional = attendanceMarks + assignmentMarks;
-        const subjectAndSessional = currentMarks + initialSessional;
-
-        const getGrade = marks => {
-          if (marks >= 87) return 10;
-          if (marks >= 75) return 9;
-          if (marks >= 65) return 8;
-          if (marks >= 55) return 7;
-          if (marks >= 45) return 6;
-          if (marks >= 35) return 5;
-          return 'F';
-        };
-
-        const currentGrade = getGrade(subjectAndSessional);
-        let upgradeBonus = 0;
-        let newGrade = currentGrade;
-
-        if (currentGrade !== 'F') {
-          const thresholds = [87, 75, 65, 55, 45, 35];
-          const grades = [10, 9, 8, 7, 6, 5];
-          const currentGradeIndex = grades.indexOf(currentGrade);
-          for (let i = currentGradeIndex - 1; i >= 0; i--) {
-            const requiredMarks = thresholds[i];
-            const diff = requiredMarks - subjectAndSessional;
-            if (diff > 0 && diff <= 5) {
-              upgradeBonus = diff;
-              newGrade = grades[i];
-              break;
-            }
-          }
-        }
-
-        const totalSessional = initialSessional + upgradeBonus;
-        const totalWithSessional = currentMarks + totalSessional;
+        const evalResult = this.evaluateSessional(attendance, assignments, currentMarks);
 
         if (!this.marksData[studentId]) this.marksData[studentId] = {};
         this.marksData[studentId]['Sessional Breakdown'] = {
-          attendance: attendanceMarks.toFixed(2),
-          assignments: assignmentMarks.toFixed(2),
-          bonus: upgradeBonus.toFixed(2),
-          sessional: totalSessional.toFixed(2),
-          total: totalWithSessional.toFixed(2),
-          grade: newGrade
+          attendance: evalResult.attendanceMarks,
+          assignments: evalResult.assignmentMarks,
+          bonus: evalResult.upgradeBonus,
+          sessional: evalResult.totalSessional,
+          total: evalResult.totalWithSessional,
+          grade: evalResult.newGrade
         };
         this.saveMarksToStorage();
 
         document.getElementById('result').innerHTML = `
-          <p><strong>Attendance Marks:</strong> ${attendanceMarks.toFixed(2)} / 10</p>
-          <p><strong>Assignment Marks:</strong> ${assignmentMarks.toFixed(2)} / 10</p>
-          <p><strong>Grade Upgrade Bonus:</strong> ${upgradeBonus.toFixed(2)} / 5</p>
-          <p><strong>Total Sessional Marks:</strong> ${totalSessional.toFixed(2)} / 25</p>
-          <p><strong>Total (Subject + Sessional):</strong> ${totalWithSessional.toFixed(2)}</p>
-          <p><strong>Previous Grade:</strong> ${currentGrade}</p>
-          <p><strong>Upgraded Grade:</strong> ${newGrade}</p>
+          <p><strong>Attendance Marks:</strong> ${evalResult.attendanceMarks} / 10</p>
+          <p><strong>Assignment Marks:</strong> ${evalResult.assignmentMarks} / 10</p>
+          <p><strong>Grade Upgrade Bonus:</strong> ${evalResult.upgradeBonus} / 5</p>
+          <p><strong>Total Sessional Marks:</strong> ${evalResult.totalSessional} / 25</p>
+          <p><strong>Total (Subject + Sessional):</strong> ${evalResult.totalWithSessional}</p>
+          <p><strong>Previous Grade:</strong> ${evalResult.currentGrade}</p>
+          <p><strong>Upgraded Grade:</strong> ${evalResult.newGrade}</p>
         `;
       },
 
@@ -406,52 +452,29 @@
               const assignments = parseFloat(student['AssignmentsSubmitted']);
               const currentMarks = parseFloat(student['CurrentMarksOutOf75']);
 
-              const attendanceMarks = (attendance / 100) * 10;
-              const assignmentMarks = (assignments / 5) * 10;
-              const initialSessional = attendanceMarks + assignmentMarks;
-              const subjectAndSessional = currentMarks + initialSessional;
+              const evalResult = this.evaluateSessional(attendance, assignments, currentMarks);
 
-              const getGrade = marks => {
-                if (marks >= 87) return 10;
-                if (marks >= 75) return 9;
-                if (marks >= 65) return 8;
-                if (marks >= 55) return 7;
-                if (marks >= 45) return 6;
-                if (marks >= 35) return 5;
-                return 'F';
-              };
-
-              const currentGrade = getGrade(subjectAndSessional);
-              let upgradeBonus = 0;
-              let newGrade = currentGrade;
-
-              if (currentGrade !== 'F') {
-                const thresholds = [87, 75, 65, 55, 45, 35];
-                const grades = [10, 9, 8, 7, 6, 5];
-                const currentGradeIndex = grades.indexOf(currentGrade);
-                for (let i = currentGradeIndex - 1; i >= 0; i--) {
-                  const requiredMarks = thresholds[i];
-                  const diff = requiredMarks - subjectAndSessional;
-                  if (diff > 0 && diff <= 5) {
-                    upgradeBonus = diff;
-                    newGrade = grades[i];
-                    break;
-                  }
-                }
+              if (!this.marksData[student.StudentID]) {
+                this.marksData[student.StudentID] = {};
               }
-
-              const totalSessional = initialSessional + upgradeBonus;
-              const totalWithSessional = currentMarks + totalSessional;
+              this.marksData[student.StudentID]['Sessional Breakdown'] = {
+                attendance: evalResult.attendanceMarks,
+                assignments: evalResult.assignmentMarks,
+                bonus: evalResult.upgradeBonus,
+                sessional: evalResult.totalSessional,
+                total: evalResult.totalWithSessional,
+                grade: evalResult.newGrade
+              };
 
               return {
                 ...student,
-                AttendanceMarks: attendanceMarks.toFixed(2),
-                AssignmentMarks: assignmentMarks.toFixed(2),
-                UpgradeBonus: upgradeBonus.toFixed(2),
-                TotalSessional: totalSessional.toFixed(2),
-                FinalTotal: totalWithSessional.toFixed(2),
-                PreviousGrade: currentGrade,
-                UpgradedGrade: newGrade
+                AttendanceMarks: evalResult.attendanceMarks,
+                AssignmentMarks: evalResult.assignmentMarks,
+                UpgradeBonus: evalResult.upgradeBonus,
+                TotalSessional: evalResult.totalSessional,
+                FinalTotal: evalResult.totalWithSessional,
+                PreviousGrade: evalResult.currentGrade,
+                UpgradedGrade: evalResult.newGrade
               };
             });
 
